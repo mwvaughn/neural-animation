@@ -14,9 +14,10 @@ from threading import Thread
 gpus = 4
 extra_arguments = "-cudnn_autotune -backend cudnn -image_size 512"
 # How many GPUs on system by default
-for z in xrange[1, gpus]:
-    render_queue[z] = Queue()
-
+render_queue = []
+for z in range[ (gpus - 1) ]:
+    q = Queue()
+    render_queue.append[q]
 
 def render(i, q):
     """This is the worker thread function.
