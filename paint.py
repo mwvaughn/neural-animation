@@ -1,5 +1,5 @@
 #!/usr/bin/python
-__author__ = 'mbartoli'
+__author__ = 'mwvaughn'
 
 import argparse
 import subprocess
@@ -8,6 +8,38 @@ import os
 import errno
 import time
 
+import Queue
+from threading import Thread
+
+gpus = 4
+extra_arguments = "-cudnn_autotune -backend cudnn -image_size 512"
+# How many GPUs on system by default
+for z in xrange[1, gpus]:
+    render_queue[z] = Queue()
+
+
+def render(i, q):
+    """This is the worker thread function.
+    It processes items in the queue one after
+    another.  These daemon threads go into an
+    infinite loop, and only exit when
+    the main thread ends.
+    """
+    while True:
+        print '%s: Looking for the next render job' % i
+        command = q.get()
+        print 'Rendering ' + command
+        # instead of really rendering
+        # we just pretend and sleep
+        time.sleep(i + 2)
+        #os.system( command )
+        q.task_done()
+
+# Set up some threads to render frames
+for i in range( (gpus - 1) ):
+    worker = Thread(target=render, args=(i, render_queue[i],))
+    worker.setDaemon(True)
+    worker.start()
 
 def make_sure_path_exists(path):
     '''
@@ -20,13 +52,13 @@ def make_sure_path_exists(path):
         if exception.errno != errno.EEXIST:
             raise
 
-def main(input, output, style, start_frame, end_frame):
+def main(input, output, style, start_frame, end_frame, gpus, extra_arguments):
     make_sure_path_exists(input)
     make_sure_path_exists(output)
 
     nrframes =len([name for name in os.listdir(input) if os.path.isfile(os.path.join(input, name))])
     if nrframes == 0:
-        print("no frames to process found")
+        print("Found no frames to process...")
         sys.exit(0)
 
     if start_frame is None:
@@ -38,35 +70,27 @@ def main(input, output, style, start_frame, end_frame):
     else:
 	nrframes = nrframes+1
 
-    now = time.time()
-    totaltime = 0
-
-    for i in xrange(frame_i, nrframes):
-        print('Processing frame #{}').format(frame_i)
-
-	os.system("th neural_style.lua -cudnn_autotune -gpu 0 -backend cudnn -image_size 512 -num_iterations 1000 -style_image " + style + " -content_image " + input + "/%08d.jpg" % frame_i + " -save_iter 2000 -output_image " + output + "/%08d.jpg" % frame_i)	
-	
-   	later = time.time()
-   	difference = int(later - now)
-	totaltime += difference
-	avgtime = (totaltime / i)
-
-	print '***************************************'
-	print 'Saving Image As: ' + output +"/%08d.jpg" % frame_i
-	print 'Frame ' + str(i) + ' of ' + str(nrframes-1)
-	print 'Frame Time: ' + str(difference) + 's'
-	timeleft = avgtime * ((nrframes-1) - frame_i)        
-	m, s = divmod(timeleft, 60)
-	h, m = divmod(m, 60)
-	print 'Estimated Total Time Remaining: ' + str(timeleft) + 's (' + "%d:%02d:%02d" % (h, m, s) + ')'
-	print '***************************************'
-
-        now = time.time()
-        frame_i += 1
-
+    # Cycle through GPUs, adding to queue
+    # Risks leaving GPUs underutilized towards end of job list
+    for i in xrange(frame_i, nrframes, num_gpus):
+        for g in range(0, num_gpus - 1):
+            frame_j = frame_i + g
+            if frame_j <= nrframes:
+                print 'Queueing on GPU ' + g
+                print 'Frame #{}'.format(frame_j)
+                command = "th neural_style.lua " + extra_arguments + "-gpu " + g + " -num_iterations 1000 -style_image " + style + " -content_image " + input + "/%08d.jpg" % frame_j + " -save_iter 2000 -output_image " + output + "/%08d.jpg" % frame_j
+                render_queue[g].put(command)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Implementing neural art on video.')
+    parser.add_argument(
+        '-g','--gpus',
+        help='Number of host GPUs', type=int, default=1,
+        required=False)
+    parser.add_argument(
+        '-x','--extra_arguments',
+        help='Other arguments', default='',
+        required=False)
     parser.add_argument(
         '-i','--input',
         help='Input directory where extracted frames are stored',
@@ -92,4 +116,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.input, args.output, args.style, args.start_frame, args.end_frame)
+    main(args.input, args.output, args.style, args.start_frame, args.end_frame, args.gpu, args.extra_arguments)

@@ -3,4 +3,8 @@ processed_frames/*
 original-*
 original_*
 2_*
+paint.pyc
 paint.py~
+.DS_Store
+
+
