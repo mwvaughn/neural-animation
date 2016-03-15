@@ -8,22 +8,15 @@ import os
 import errno
 import time
 from random import randint
-
 from multiprocessing import Queue, Process
-#from Queue import Queue
-#from threading import Thread
 
 extra_arguments = "-cudnn_autotune -backend cudnn -image_size 512"
-
-# How many GPUs on system by default
-gpus = 4
-
 
 def render_worker( work_queue, done_queue ):
 
     for cmd in iter( work_queue.get, 'STOP' ):
         print 'Rendering ' + cmd
-        time.sleep(randint(1,5))
+        #os.system( cmd )
         print 'Rendered'
         done_queue.put('Success: ' + cmd)
 
@@ -75,7 +68,7 @@ def main(input, output, style, start_frame, end_frame, gpus, extra_arguments):
             if frame_j <= nrframes:
                 print 'Frame: {}'.format(frame_j)
                 print 'GPU: ' + str(g)
-                command = "th neural_style.lua " + extra_arguments + "-gpu " + str(g) + " -num_iterations 1000 -style_image " + style + " -content_image " + input + "/%08d.jpg" % frame_j + " -save_iter 2000 -output_image " + output + "/%08d.jpg" % frame_j
+                command = "th neural_style.lua " + extra_arguments + " -gpu " + str(g) + " -num_iterations 1000 -style_image " + style + " -content_image " + input + "/%08d.jpg" % frame_j + " -save_iter 2000 -output_image " + output + "/%08d.jpg" % frame_j
                 render_queue[g].put(command)
 
 # Start worker processes
@@ -99,7 +92,7 @@ if __name__ == "__main__":
         required=False)
     parser.add_argument(
         '-x','--extra_arguments',
-        help='Other arguments', default='',
+        help='Other arguments', default='-cudnn_autotune -backend cudnn -image_size 512',
         required=False)
     parser.add_argument(
         '-i','--input',
